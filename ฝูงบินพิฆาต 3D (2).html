@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>ฝูงบินพิฆาต 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0b1e3a;font-family:'Kanit',system-ui,sans-serif;color:#fff;touch-action:none;user-select:none;-webkit-user-select:none}
+  #c{display:block;width:100%;height:100%}
+  #hud{position:fixed;left:0;right:0;top:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;text-shadow:0 2px 6px rgba(0,0,0,.45)}
+  #hud .big{font-size:30px;font-weight:700;line-height:1}
+  #hud .small{font-size:12px;opacity:.85;letter-spacing:.04em}
+  #lives{font-size:24px;letter-spacing:2px}
+  #overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:linear-gradient(180deg,rgba(7,24,52,.55),rgba(7,24,52,.8));transition:opacity .3s}
+  #overlay.hide{opacity:0;pointer-events:none}
+  h1{font-size:40px;font-weight:700;line-height:1.15;text-shadow:0 4px 18px rgba(0,0,0,.5)}
+  h1 span{color:#ffcf4a}
+  p{margin-top:10px;font-size:16px;opacity:.9;max-width:330px;line-height:1.5}
+  button{margin-top:26px;font-family:inherit;font-size:20px;font-weight:600;padding:14px 38px;border:0;border-radius:999px;background:#ffcf4a;color:#2a1b00;box-shadow:0 6px 0 #c9971a,0 10px 24px rgba(0,0,0,.35);cursor:pointer}
+  button:active{transform:translateY(3px);box-shadow:0 3px 0 #c9971a}
+  button.sec{background:#fff;color:#12304f;box-shadow:0 5px 0 #a9b8c8,0 8px 20px rgba(0,0,0,.3);font-size:16px;padding:10px 26px;margin-top:18px}
+  button.sec:active{box-shadow:0 2px 0 #a9b8c8}
+  button.on{background:#7dffb0}
+  #laser{position:fixed;right:20px;bottom:26px;width:96px;height:96px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:#032;background:radial-gradient(circle at 35% 30%,#aff,#0bb 70%);border:3px solid #fff;box-shadow:0 0 22px #0ffa;overflow:hidden;opacity:0;pointer-events:none;touch-action:none}
+  #laser.show{opacity:1;pointer-events:auto}
+  #laser.empty{filter:grayscale(.85)}
+  #laser span{position:relative;z-index:1;text-shadow:0 1px 2px #fff8}
+  #lbar{position:absolute;left:0;right:0;top:0;height:0;background:rgba(0,30,50,.62)}
+  #radar{position:fixed;left:16px;bottom:26px;width:96px;height:96px;border-radius:50%;background:rgba(5,20,40,.45);opacity:0;pointer-events:none;transition:opacity .3s}
+  #radar.show{opacity:1}
+  #joy{position:fixed;width:90px;height:90px;border:2px solid rgba(255,255,255,.5);border-radius:50%;opacity:0;pointer-events:none}
+  #joy.show{opacity:1}
+  #knob{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px;border-radius:50%;background:rgba(255,255,255,.6)}
+  #reticle{position:fixed;left:0;top:0;width:44px;height:44px;margin:-22px 0 0 -22px;border:2px solid currentColor;border-radius:50%;color:#fff;opacity:0;pointer-events:none;will-change:transform;filter:drop-shadow(0 0 3px rgba(0,0,0,.6))}
+  #reticle::after{content:'';position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:currentColor}
+  #reticle.lock{color:#ff4d3d;border-width:3px}
+  #flash{position:fixed;inset:0;background:#ff3b30;opacity:0;pointer-events:none;transition:opacity .35s}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div><div class="small">คะแนน</div><div class="big" id="score">0</div></div>
+  <div style="text-align:center"><div class="small">สูงสุด</div><div class="big" id="best" style="font-size:20px">0</div><div class="small" id="alt" style="margin-top:4px"></div></div>
+  <div style="text-align:right"><div class="small">ชีวิต</div><div id="lives">♥♥♥</div></div>
+</div>
+<div id="flash"></div>
+<div id="reticle"></div>
+<canvas id="radar" width="96" height="96"></canvas>
+<div id="joy"><div id="knob"></div></div>
+<div id="laser"><i id="lbar"></i><span>เลเซอร์</span></div>
+<div id="overlay">
+  <h1 id="title">ฝูงบิน<span>พิฆาต</span> 3D</h1>
+  <p id="msg">บินอิสระทุกทิศ ลากนิ้วเพื่อเลี้ยวและเงยหัว (ลากขึ้น = เงยหัวขึ้น) ยิงกระสุนอัตโนมัติ กดค้างปุ่มเลเซอร์ยิงทะลุทุกลำ ระวังภูเขาและข้าศึกที่ไล่ตาม ดูตำแหน่งข้าศึกในเรดาร์มุมซ้ายล่าง</p>
+  <button id="go">เริ่มบิน</button>
+  <button id="tilt" class="sec">เอียงมือถือบังคับ: ปิด</button>
+  <p id="tiltnote" style="font-size:13px;min-height:20px;margin-top:8px"></p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+  const canvas = $('c');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const scene = new THREE.Scene();
+  const SKY = 0x9fd8ff;
+  scene.background = new THREE.Color(SKY);
+  scene.fog = new THREE.Fog(SKY, 120, 520);
+  const camera = new THREE.PerspectiveCamera(65, 1, 0.1, 800);
+
+  function resize(){
+    const w = innerWidth, h = innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.fov = w / h < 0.8 ? 80 : 65;
+    camera.updateProjectionMatrix();
+  }
+  addEventListener('resize', resize); resize();
+
+  scene.add(new THREE.HemisphereLight(0xdff2ff, 0x5a7a4a, 0.9));
+  const sun = new THREE.DirectionalLight(0xfff2cc, 0.9);
+  sun.position.set(30, 60, 20); scene.add(sun);
+
+  const PER = 1200;                      // world wraps every PER units around the player
+  const wrap = (v, c) => v + Math.round((c - v) / PER) * PER;
+  const FLOOR = 2.5, CEIL = 140;
+
+  // ground: world-fixed patchwork texture
+  function groundTexture(){
+    const n = 16, s = 32, cv = document.createElement('canvas');
+    cv.width = cv.height = n * s;
+    const g = cv.getContext('2d');
+    const pal = ['#5d9c4a','#6aab55','#4f8a41','#8ab25a','#c9b46a','#3f7fb0','#4a8cbc'];
+    for(let y=0;y<n;y++) for(let x=0;x<n;x++){
+      g.fillStyle = pal[(Math.random()*pal.length)|0];
+      g.fillRect(x*s, y*s, s, s);
+    }
+    g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 2;
+    for(let i=0;i<=n;i++){ g.beginPath(); g.moveTo(i*s,0); g.lineTo(i*s,n*s); g.stroke(); g.beginPath(); g.moveTo(0,i*s); g.lineTo(n*s,i*s); g.stroke(); }
+    const t = new THREE.CanvasTexture(cv);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(10, 10);
+    t.anisotropy = 4;
+    return t;
+  }
+  const GW = 1600;
+  const gTex = groundTexture();
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(GW, GW), new THREE.MeshLambertMaterial({map:gTex}));
+  ground.rotation.x = -Math.PI/2;
+  scene.add(ground);
+
+  // clouds (wrapped around player)
+  const clouds = [];
+  const cloudMat = new THREE.MeshLambertMaterial({color:0xffffff, emissive:0x667788, flatShading:true});
+  function makeCloud(){
+    const g = new THREE.Group();
+    const k = 4 + (Math.random()*3|0);
+    for(let i=0;i<k;i++){
+      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(4 + Math.random()*4, 0), cloudMat);
+      m.position.set((i-k/2)*6 + Math.random()*3, Math.random()*3, Math.random()*5);
+      m.scale.y = 0.6; g.add(m);
+    }
+    return g;
+  }
+  for(let i=0;i<40;i++){
+    const c = makeCloud();
+    c.userData.bx = (Math.random()-0.5)*PER; c.userData.bz = (Math.random()-0.5)*PER;
+    c.position.y = 35 + Math.random()*90;
+    scene.add(c); clouds.push(c);
+  }
+
+  // mountains (solid)
+  const mountains = [];
+  const mMats = [0x5f8a52, 0x7a8f6a, 0x8b8f96].map(c => new THREE.MeshLambertMaterial({color:c, flatShading:true}));
+  for(let i=0;i<70;i++){
+    let bx, bz;
+    do { bx = (Math.random()-0.5)*PER; bz = (Math.random()-0.5)*PER; } while(Math.hypot(bx, bz) < 160);
+    const r = 25 + Math.random()*45, h = r * (0.8 + Math.random()*0.9);
+    const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7), mMats[(Math.random()*3)|0]);
+    m.position.y = h/2;
+    m.userData = {bx, bz, r, h};
+    scene.add(m); mountains.push(m);
+  }
+
+  // airplane (nose points to -z)
+  function makePlane(body, accent){
+    const g = new THREE.Group();
+    const mb = new THREE.MeshLambertMaterial({color:body, flatShading:true});
+    const ma = new THREE.MeshLambertMaterial({color:accent, flatShading:true});
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.4,4,10).rotateX(Math.PI/2), mb));
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.4,1.2,10).rotateX(-Math.PI/2), ma); nose.position.z=-2.6; g.add(nose);
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(7,0.12,1.5), ma); wing.position.z=-0.2; g.add(wing);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(2.4,0.1,0.8), ma); tail.position.z=1.8; g.add(tail);
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.1,1,0.9), mb); fin.position.set(0,0.5,1.7); g.add(fin);
+    const cock = new THREE.Mesh(new THREE.SphereGeometry(0.35,10,8), new THREE.MeshLambertMaterial({color:0x9fe3ff, emissive:0x113344}));
+    cock.scale.set(1,0.8,1.8); cock.position.set(0,0.4,-0.6); g.add(cock);
+    return g;
+  }
+
+  const player = makePlane(0xe9eef5, 0x2f7de1);
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.22,1.4,8).rotateX(Math.PI/2), new THREE.MeshBasicMaterial({color:0xffa733}));
+  flame.position.z = 3.0; player.add(flame);
+  scene.add(player);
+  const P = player.position;
+
+  // laser beam
+  const beam = new THREE.Group();
+  beam.add(new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,260,8).rotateX(Math.PI/2), new THREE.MeshBasicMaterial({color:0xffffff, fog:false})));
+  beam.add(new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.55,260,10).rotateX(Math.PI/2), new THREE.MeshBasicMaterial({color:0x22ffee, transparent:true, opacity:0.38, depthWrite:false, fog:false})));
+  beam.visible = false; scene.add(beam);
+
+  // state
+  let state = 'menu';
+  let score = 0, lives = 3, best = 0, invuln = 0, shake = 0;
+  let heading = 0, pitch = 0, roll = 0, speed = 60;
+  let enemies = [], bullets = [], parts = [];
+  let spawnT = 0, fireT = 0, tAlive = 0, snapCam = true;
+  let energy = 100, laserHeld = false, laserOn = false, laserLock = false;
+  const stickP = {x:0,y:0}, stickT = {x:0,y:0}, keys = {l:0,r:0,u:0,d:0};
+  const fwd = new THREE.Vector3(), rgt = new THREE.Vector3(), tmp = new THREE.Vector3(), aimV = new THREE.Vector3(), camGoal = new THREE.Vector3();
+  P.set(0, 70, 0);
+  try { best = +localStorage.getItem('plane3d-best') || 0; } catch(e){}
+  $('best').textContent = best;
+
+  const bulletGeo = new THREE.BoxGeometry(0.22,0.22,2.4);
+  const bulletMat = new THREE.MeshBasicMaterial({color:0xffee66});
+  const partGeo = new THREE.BoxGeometry(0.5,0.5,0.5);
+
+  function setLives(){ $('lives').textContent = '♥'.repeat(Math.max(lives,0)) + '♡'.repeat(Math.max(3-lives,0)); }
+
+  function spawnEnemy(){
+    const a = heading + (Math.random()-0.5)*2.4, dist = 240 + Math.random()*60;
+    const e = new THREE.Group();
+    const inner = makePlane(0xb02a2a, 0x3a3a46); inner.rotation.y = Math.PI; e.add(inner);
+    e.scale.setScalar(1.3);
+    e.position.set(P.x - Math.sin(a)*dist, clamp(P.y + (Math.random()-0.5)*80, 8, 130), P.z - Math.cos(a)*dist);
+    e.userData = {
+      dir: new THREE.Vector3().copy(P).sub(e.position).normalize(),
+      v: 42 + Math.min(score/80, 30) + Math.random()*10,
+      turn: 0.8 + Math.min(score/4000, 0.6),
+      ph: Math.random()*6, life: 35, inner
+    };
+    scene.add(e); enemies.push(e);
+  }
+
+  function boom(pos, color, n){
+    for(let i=0;i<n;i++){
+      const m = new THREE.Mesh(partGeo, new THREE.MeshBasicMaterial({color: i%3===0?0xffffff:color, transparent:true}));
+      m.position.copy(pos);
+      m.userData.v = new THREE.Vector3((Math.random()-0.5)*28,(Math.random()-0.5)*28,(Math.random()-0.5)*28);
+      m.userData.life = 0.7 + Math.random()*0.4;
+      m.scale.setScalar(0.8 + Math.random()*1.4);
+      scene.add(m); parts.push(m);
+    }
+  }
+
+  function shoot(){
+    for(const s of [-1.9, 1.9]){
+      const b = new THREE.Mesh(bulletGeo, bulletMat);
+      b.position.copy(P).addScaledVector(fwd, 2).addScaledVector(rgt, s);
+      b.quaternion.copy(player.quaternion);
+      b.userData = {v: fwd.clone().multiplyScalar(speed + 170), life: 1.7};
+      scene.add(b); bullets.push(b);
+    }
+  }
+
+  function kill(i){
+    const e = enemies[i];
+    boom(e.position, 0xff7a1a, 14); scene.remove(e); enemies.splice(i,1);
+    score += 100;
+  }
+
+  function hurt(){
+    lives--; setLives(); invuln = 1.6; shake = 0.7;
+    flash.style.transition = 'none'; flash.style.opacity = .45;
+    requestAnimationFrame(()=>{ flash.style.transition = 'opacity .35s'; flash.style.opacity = 0; });
+    if(lives <= 0) gameOver();
+  }
+
+  function reset(){
+    for(const a of [enemies,bullets,parts]){ a.forEach(o=>scene.remove(o)); a.length = 0; }
+    score = 0; lives = 3; invuln = 0; spawnT = 1; fireT = 0; tAlive = 0; shake = 0;
+    energy = 100; laserHeld = false; laserOn = false; laserLock = false;
+    heading = 0; pitch = 0; roll = 0; speed = 60;
+    P.set(0, 70, 0); player.visible = true; snapCam = true;
+    stickP.x = stickP.y = 0;
+    $('score').textContent = 0; setLives();
+  }
+
+  function start(){
+    reset(); state = 'play';
+    if(tiltOn){ g0 = gNow; b0 = bNow; }
+    $('laser').classList.add('show'); $('radar').classList.add('show');
+    $('overlay').classList.add('hide');
+  }
+  function gameOver(){
+    state = 'over'; laserHeld = false; laserOn = false;
+    $('laser').classList.remove('show'); $('radar').classList.remove('show');
+    boom(P, 0xffa733, 30); player.visible = false;
+    if(score > best){ best = score; try{ localStorage.setItem('plane3d-best', best); }catch(e){} }
+    $('best').textContent = best;
+    $('title').innerHTML = 'เครื่อง<span>ตก</span>แล้ว!';
+    $('msg').textContent = 'คะแนน ' + score + (score >= best && score > 0 ? '  (สถิติใหม่!)' : '') + ' — ลองอีกครั้งไหม';
+    $('go').textContent = 'บินอีกรอบ';
+    setTimeout(()=> $('overlay').classList.remove('hide'), 900);
+  }
+  $('go').addEventListener('click', start);
+
+  // ---- tilt control ----
+  let tiltOn = false, tiltGot = false, g0 = null, b0 = null, gNow = 0, bNow = 0, tMin = 1e9, tMax = -1e9;
+  function onTilt(e){
+    if(e.gamma == null || e.beta == null) return;
+    tiltGot = true; gNow = e.gamma; bNow = e.beta;
+    tMin = Math.min(tMin, gNow); tMax = Math.max(tMax, gNow);
+    const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+    if(ang % 180 !== 0){ stickT.x = stickT.y = 0; if(tiltOn) $('tiltnote').textContent = 'หมุนจอเป็นแนวตั้งก่อน (ตอนนี้จอเป็นแนวนอน)'; return; }
+    if(g0 === null){ g0 = gNow; b0 = bNow; }
+    if(!tiltOn) return;
+    stickT.x = clamp((gNow - g0) / 25, -1, 1);
+    stickT.y = clamp(-(bNow - b0) / 22, -1, 1);
+  }
+  function tiltOff(){ tiltOn = false; stickT.x = stickT.y = 0; $('tilt').textContent = 'เอียงมือถือบังคับ: ปิด'; $('tilt').classList.remove('on'); }
+  async function enableTilt(){
+    const note = $('tiltnote'), btn = $('tilt');
+    try{
+      if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+        const r = await DeviceOrientationEvent.requestPermission();
+        if(r !== 'granted'){ note.textContent = 'ไม่ได้รับอนุญาตให้ใช้เซ็นเซอร์ ใช้การลากนิ้วแทน'; return; }
+      }
+    }catch(err){ note.textContent = 'เปิดเซ็นเซอร์ไม่ได้ ใช้การลากนิ้วแทน'; return; }
+    window.addEventListener('deviceorientation', onTilt);
+    tiltOn = true; g0 = null; b0 = null; tiltGot = false;
+    btn.textContent = 'เอียงมือถือบังคับ: เปิด'; btn.classList.add('on');
+    note.textContent = 'ถือแนวตั้ง เอียงซ้าย-ขวา = เลี้ยว / ดึงเข้าหาตัว = เงยหัวขึ้น';
+    setTimeout(()=>{
+      if(!tiltGot && tiltOn){
+        tiltOff();
+        note.textContent = 'แอป/เบราว์เซอร์นี้ไม่ส่งข้อมูลเซ็นเซอร์ให้หน้าเว็บ (ไม่ได้รับสัญญาณเลย) ใช้การลากนิ้วแทน';
+      } else if(tiltGot && tiltOn && tMax - tMin < 0.5){
+        note.textContent = 'ได้รับสัญญาณแต่ค่าไม่ขยับ ลองเอียงมือถือแรงๆ ดูว่าค่าเปลี่ยนไหม';
+      }
+    }, 3500);
+  }
+  $('tilt').addEventListener('click', ()=>{
+    if(tiltOn){ tiltOff(); $('tiltnote').textContent = ''; } else enableTilt();
+  });
+
+  // ---- pointer / keyboard ----
+  const joy = $('joy'), knob = $('knob');
+  const ptr = {id:null, ox:0, oy:0};
+  const onLaser = e => e.target && e.target.closest && e.target.closest('#laser');
+  addEventListener('pointerdown', e => {
+    if(state !== 'play' || tiltOn || onLaser(e)) return;
+    if(e.pointerType !== 'mouse' && ptr.id === null){
+      ptr.id = e.pointerId; ptr.ox = e.clientX; ptr.oy = e.clientY;
+      joy.style.left = (ptr.ox - 45) + 'px'; joy.style.top = (ptr.oy - 45) + 'px';
+      knob.style.transform = 'none'; joy.classList.add('show');
+      stickP.x = stickP.y = 0;
+    }
+  });
+  addEventListener('pointermove', e => {
+    if(tiltOn || onLaser(e)) return;
+    if(e.pointerType === 'mouse'){
+      const dz = v => Math.abs(v) < 0.08 ? 0 : v;
+      stickP.x = clamp(dz((e.clientX/innerWidth - 0.5) * 2.2), -1, 1);
+      stickP.y = clamp(dz((e.clientY/innerHeight - 0.5) * 2.2), -1, 1);
+    } else if(e.pointerId === ptr.id){
+      stickP.x = clamp((e.clientX - ptr.ox) / 70, -1, 1);
+      stickP.y = clamp((e.clientY - ptr.oy) / 70, -1, 1);
+      knob.style.transform = 'translate(' + (stickP.x*30) + 'px,' + (stickP.y*30) + 'px)';
+    }
+  });
+  let laserId = null;
+  $('laser').addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); laserId = e.pointerId; laserHeld = true; });
+  const pUp = e => {
+    if(e.pointerId === laserId){ laserHeld = false; laserId = null; }
+    if(e.pointerId === ptr.id){ ptr.id = null; stickP.x = stickP.y = 0; joy.classList.remove('show'); }
+  };
+  addEventListener('pointerup', pUp);
+  addEventListener('pointercancel', pUp);
+
+  const keyMap = {ArrowLeft:'l', a:'l', ArrowRight:'r', d:'r', ArrowUp:'u', w:'u', ArrowDown:'d', s:'d'};
+  addEventListener('keydown', e => {
+    if(e.code === 'Space'){
+      laserHeld = true; e.preventDefault();
+      if(state !== 'play' && !$('overlay').classList.contains('hide')) start();
+      return;
+    }
+    const k = keyMap[e.key]; if(k){ keys[k] = 1; e.preventDefault(); }
+    if(e.key === 'Enter' && state !== 'play' && !$('overlay').classList.contains('hide')) start();
+  });
+  addEventListener('keyup', e => {
+    if(e.code === 'Space'){ laserHeld = false; return; }
+    const k = keyMap[e.key]; if(k) keys[k] = 0;
+  });
+
+  // ---- radar ----
+  const rc = $('radar'), rg = rc.getContext('2d');
+  function drawRadar(){
+    rg.clearRect(0,0,96,96);
+    rg.strokeStyle = 'rgba(255,255,255,.35)'; rg.lineWidth = 1.5;
+    rg.beginPath(); rg.arc(48,48,46,0,6.283); rg.stroke();
+    rg.beginPath(); rg.arc(48,48,23,0,6.283); rg.stroke();
+    const ch = Math.cos(heading), sh = Math.sin(heading), RANGE = 320;
+    rg.fillStyle = '#ff4d3d';
+    for(const e of enemies){
+      const rx = e.position.x - P.x, rz = e.position.z - P.z;
+      let sx = rx*ch - rz*sh, sy = rx*(-sh) + rz*(-ch);   // right, forward
+      let len = Math.hypot(sx, sy) / RANGE * 44;
+      const mag = Math.hypot(sx, sy) || 1;
+      if(len > 42) len = 42;
+      rg.beginPath(); rg.arc(48 + sx/mag*len, 48 - sy/mag*len, 3, 0, 6.283); rg.fill();
+    }
+    rg.fillStyle = '#fff';
+    rg.beginPath(); rg.moveTo(48,41); rg.lineTo(53,53); rg.lineTo(43,53); rg.closePath(); rg.fill();
+  }
+
+  const clock = new THREE.Clock();
+  const flash = $('flash');
+
+  function loop(){
+    requestAnimationFrame(loop);
+    const dt = Math.min(clock.getDelta(), 0.05);
+    const t = clock.elapsedTime;
+
+    // stick input
+    let sx, sy;
+    if(state === 'menu'){ sx = 0.4; sy = Math.sin(t*0.6)*0.3; }
+    else {
+      sx = clamp(stickP.x + stickT.x + (keys.r - keys.l), -1, 1);
+      sy = clamp(stickP.y + stickT.y + (keys.d - keys.u), -1, 1);
+    }
+
+    // flight model
+    if(state !== 'over'){
+      const targetPitch = -sy * 1.0;
+      pitch += (targetPitch - pitch) * Math.min(1, dt*3);
+      if(P.y <= FLOOR + 0.05 && pitch < 0) pitch = 0;
+      heading -= sx * 1.5 * dt;
+      roll += (-sx * 1.0 - roll) * Math.min(1, dt*5);
+      speed = 60 - 25*Math.sin(pitch);
+      fwd.set(-Math.sin(heading)*Math.cos(pitch), Math.sin(pitch), -Math.cos(heading)*Math.cos(pitch));
+      rgt.set(Math.cos(heading), 0, -Math.sin(heading));
+      P.addScaledVector(fwd, speed*dt);
+      P.y = clamp(P.y, FLOOR, CEIL);
+      player.rotation.set(pitch, heading, roll, 'YXZ');
+      flame.scale.z = 0.8 + Math.sin(t*50)*0.3;
+    } else {
+      player.rotation.z += dt*3;
+    }
+
+    // world follows player
+    ground.position.set(P.x, 0, P.z);
+    gTex.offset.set(P.x / GW * 10, -P.z / GW * 10);
+    for(const c of clouds){ c.position.x = wrap(c.userData.bx, P.x); c.position.z = wrap(c.userData.bz, P.z); }
+    for(const m of mountains){ m.position.x = wrap(m.userData.bx, P.x); m.position.z = wrap(m.userData.bz, P.z); }
+
+    if(state === 'play'){
+      tAlive += dt;
+      if(Math.floor(tAlive*2) !== Math.floor((tAlive-dt)*2)) score += 1;
+      invuln = Math.max(0, invuln - dt);
+      player.visible = invuln <= 0 || Math.floor(t*14) % 2 === 0;
+
+      // weapons
+      fireT -= dt;
+      const want = laserHeld && !laserLock && energy > 0;
+      if(want){
+        energy -= 38*dt;
+        if(energy <= 0){ energy = 0; laserLock = true; }
+      } else {
+        energy = Math.min(100, energy + 16*dt);
+        if(laserLock && energy >= 30) laserLock = false;
+      }
+      laserOn = want && !laserLock;
+      $('lbar').style.height = (100 - energy) + '%';
+      $('laser').classList.toggle('empty', laserLock);
+      if(fireT <= 0 && !laserOn){ shoot(); fireT = 0.15; }
+
+      // spawn
+      spawnT -= dt;
+      const maxE = Math.min(5 + Math.floor(score/400), 14);
+      if(spawnT <= 0 && enemies.length < maxE){ spawnEnemy(); spawnT = 1.0 + Math.random()*0.8; }
+
+      // laser hits
+      if(laserOn){
+        for(let i=enemies.length-1;i>=0;i--){
+          tmp.copy(enemies[i].position).sub(P);
+          const d = tmp.dot(fwd);
+          if(d > 0 && d < 260 && tmp.lengthSq() - d*d < 14) kill(i);
+        }
+      }
+
+      // bullets
+      for(let j=bullets.length-1;j>=0;j--){
+        const b = bullets[j];
+        b.position.addScaledVector(b.userData.v, dt); b.userData.life -= dt;
+        let hit = false;
+        for(let i=enemies.length-1;i>=0;i--){
+          if(b.position.distanceToSquared(enemies[i].position) < 20){ kill(i); hit = true; break; }
+        }
+        if(hit || b.userData.life <= 0){ scene.remove(b); bullets.splice(j,1); }
+      }
+
+      // enemies chase the player
+      for(let i=enemies.length-1;i>=0;i--){
+        const e = enemies[i], d = e.userData;
+        tmp.copy(P).sub(e.position).normalize();
+        d.dir.lerp(tmp, Math.min(1, d.turn*dt)).normalize();
+        e.position.addScaledVector(d.dir, d.v*dt);
+        if(e.position.y < 5) e.position.y = 5;
+        e.lookAt(e.position.x + d.dir.x, e.position.y + d.dir.y, e.position.z + d.dir.z);
+        d.inner.rotation.z = Math.sin(t*2 + d.ph) * 0.5;
+        d.life -= dt;
+        if(invuln <= 0 && e.position.distanceToSquared(P) < 22){
+          boom(e.position, 0xff7a1a, 16); scene.remove(e); enemies.splice(i,1);
+          hurt(); if(state !== 'play') break; continue;
+        }
+        if(d.life <= 0 || e.position.distanceToSquared(P) > 520*520){ scene.remove(e); enemies.splice(i,1); }
+      }
+
+      // mountains
+      if(state === 'play'){
+        for(const m of mountains){
+          const dx = P.x - m.position.x, dz = P.z - m.position.z, r = m.userData.r, d2 = dx*dx + dz*dz;
+          if(d2 < r*r){
+            const hgt = m.userData.h * (1 - Math.sqrt(d2)/r);
+            if(P.y < hgt + 1.5){
+              if(invuln <= 0){ boom(P, 0xb0a080, 12); hurt(); }
+              P.y = hgt + 10; pitch = Math.max(pitch, 0.3);
+              if(state !== 'play') break;
+            }
+          }
+        }
+      }
+      $('score').textContent = score;
+      $('alt').textContent = 'สูง ' + Math.round(P.y) + ' ม.' + (tiltOn ? ' · เอียง ' + stickT.x.toFixed(2) + ' / ' + stickT.y.toFixed(2) : '');
+      drawRadar();
+    }
+
+    // particles
+    for(let i=parts.length-1;i>=0;i--){
+      const p = parts[i], d = p.userData;
+      d.life -= dt; p.position.addScaledVector(d.v, dt);
+      p.rotation.x += dt*6; p.material.opacity = Math.max(0, d.life*1.4);
+      p.scale.multiplyScalar(1 - dt*0.8);
+      if(d.life <= 0){ scene.remove(p); p.material.dispose(); parts.splice(i,1); }
+    }
+
+    // beam visual
+    if(state !== 'play') laserOn = false;
+    beam.visible = laserOn;
+    if(laserOn){
+      beam.position.copy(P).addScaledVector(fwd, 2.5 + 130);
+      beam.quaternion.copy(player.quaternion);
+      const w = 1 + Math.sin(t*70)*0.18;
+      beam.scale.set(w, w, 1);
+    }
+
+    // chase camera
+    shake = Math.max(0, shake - dt*1.5);
+    const cp = pitch*0.5;
+    camGoal.set(P.x + Math.sin(heading)*Math.cos(cp)*15, P.y - Math.sin(cp)*15 + 4.5, P.z + Math.cos(heading)*Math.cos(cp)*15);
+    if(snapCam){ camera.position.copy(camGoal); snapCam = false; }
+    else camera.position.lerp(camGoal, 1 - Math.pow(0.0005, dt));
+    camera.position.y = Math.max(1.5, camera.position.y);
+    camera.position.x += (Math.random()-0.5)*shake; camera.position.y += (Math.random()-0.5)*shake;
+    camera.lookAt(P.x + fwd.x*30, P.y + fwd.y*18 + 1, P.z + fwd.z*30);
+
+    // aiming reticle: where the bullets are heading
+    const ret = $('reticle');
+    if(state === 'play'){
+      camera.updateMatrixWorld();
+      aimV.copy(P).addScaledVector(fwd, 150).project(camera);
+      ret.style.transform = 'translate(' + ((aimV.x*0.5+0.5)*innerWidth) + 'px,' + ((-aimV.y*0.5+0.5)*innerHeight) + 'px)';
+      let lock = false;
+      for(const e of enemies){
+        aimV.copy(e.position).sub(P);
+        const d = aimV.dot(fwd), tol = 4 + d*0.05;
+        if(d > 0 && d < 300 && aimV.lengthSq() - d*d < tol*tol){ lock = true; break; }
+      }
+      ret.classList.toggle('lock', lock);
+      ret.style.opacity = 1;
+    } else ret.style.opacity = 0;
+
+    renderer.render(scene, camera);
+  }
+  loop();
+})();
+</script>
+</body>
+</html>
