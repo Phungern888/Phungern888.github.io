@@ -57,6 +57,7 @@
   <p id="msg">บินอิสระทุกทิศ ลากนิ้วเพื่อเลี้ยวและเงยหัว (ลากขึ้น = เงยหัวขึ้น) ยิงกระสุนอัตโนมัติ กดค้างปุ่มเลเซอร์ยิงทะลุทุกลำ ระวังภูเขาและข้าศึกที่ไล่ตาม ดูตำแหน่งข้าศึกในเรดาร์มุมซ้ายล่าง</p>
   <button id="go">เริ่มบิน</button>
   <button id="tilt" class="sec">เอียงมือถือบังคับ: ปิด</button>
+  <button id="sens" class="sec" style="margin-top:10px;font-size:14px;padding:8px 20px">ความไวการเอียง: กลาง</button>
   <p id="tiltnote" style="font-size:13px;min-height:20px;margin-top:8px"></p>
 </div>
 
@@ -273,6 +274,22 @@
   $('go').addEventListener('click', start);
 
   // ---- tilt control ----
+  const RANGES = [55, 40, 28], SENS_NAMES = ['ต่ำ (เอียงเยอะ)', 'กลาง', 'สูง (เอียงนิดเดียว)'];
+  let sens = 1;
+  try { const v = +localStorage.getItem('plane3d-sens'); if(v >= 0 && v <= 2 && localStorage.getItem('plane3d-sens') !== null) sens = v; } catch(e){}
+  $('sens').textContent = 'ความไวการเอียง: ' + SENS_NAMES[sens];
+  $('sens').addEventListener('click', () => {
+    sens = (sens + 1) % 3;
+    $('sens').textContent = 'ความไวการเอียง: ' + SENS_NAMES[sens];
+    try { localStorage.setItem('plane3d-sens', sens); } catch(e){}
+  });
+  // dead zone + gentle curve: small tilts = fine control, full tilt = full turn
+  function shape(deg, range){
+    const a = Math.abs(deg);
+    if(a < 2.5) return 0;
+    const n = Math.min(1, (a - 2.5) / (range - 2.5));
+    return Math.sign(deg) * n * (0.4 + 0.6 * n);
+  }
   let tiltOn = false, tiltGot = false, g0 = null, b0 = null, gNow = 0, bNow = 0, tMin = 1e9, tMax = -1e9;
   function onTilt(e){
     if(e.gamma == null || e.beta == null) return;
@@ -282,8 +299,10 @@
     if(ang % 180 !== 0){ stickT.x = stickT.y = 0; if(tiltOn) $('tiltnote').textContent = 'หมุนจอเป็นแนวตั้งก่อน (ตอนนี้จอเป็นแนวนอน)'; return; }
     if(g0 === null){ g0 = gNow; b0 = bNow; }
     if(!tiltOn) return;
-    stickT.x = clamp((gNow - g0) / 25, -1, 1);
-    stickT.y = clamp(-(bNow - b0) / 22, -1, 1);
+    const tx = shape(gNow - g0, RANGES[sens]);
+    const ty = shape(-(bNow - b0), RANGES[sens]);
+    stickT.x += (tx - stickT.x) * 0.3;
+    stickT.y += (ty - stickT.y) * 0.3;
   }
   function tiltOff(){ tiltOn = false; stickT.x = stickT.y = 0; $('tilt').textContent = 'เอียงมือถือบังคับ: ปิด'; $('tilt').classList.remove('on'); }
   async function enableTilt(){
